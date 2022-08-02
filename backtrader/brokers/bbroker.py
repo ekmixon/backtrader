@@ -260,7 +260,7 @@ class BackBroker(bt.BrokerBase):
         self._leverage = 1.0  # initially nothing is open
         self._unrealized = 0.0  # no open position
 
-        self.orders = list()  # will only be appending
+        self.orders = []
         self.pending = collections.deque()  # popleft and append(right)
         self._toactivate = collections.deque()  # to activate in next cycle
 
@@ -273,7 +273,7 @@ class BackBroker(bt.BrokerBase):
         # to keep dependent orders if needed
         self._pchildren = collections.defaultdict(collections.deque)
 
-        self._ocos = dict()
+        self._ocos = {}
         self._ocol = collections.defaultdict(list)
 
         self._fundval = self.p.fundstartval
@@ -408,9 +408,9 @@ class BackBroker(bt.BrokerBase):
         '''
         if datas is None:
             if mkt:
-                return self._valuemkt if not lever else self._valuemktlever
+                return self._valuemktlever if lever else self._valuemkt
 
-            return self._value if not lever else self._valuelever
+            return self._valuelever if lever else self._value
 
         return self._get_value(datas=datas, lever=lever)
 
@@ -433,10 +433,11 @@ class BackBroker(bt.BrokerBase):
             comminfo = self.getcommissioninfo(data)
             position = self.positions[data]
             # use valuesize:  returns raw value, rather than negative adj val
-            if not self.p.shortcash:
-                dvalue = comminfo.getvalue(position, data.close[0])
-            else:
-                dvalue = comminfo.getvaluesize(position.size, data.close[0])
+            dvalue = (
+                comminfo.getvaluesize(position.size, data.close[0])
+                if self.p.shortcash
+                else comminfo.getvalue(position, data.close[0])
+            )
 
             dunrealized = comminfo.profitandloss(position.size, position.price,
                                                  data.close[0])
@@ -484,7 +485,7 @@ class BackBroker(bt.BrokerBase):
         self._leverage = pos_value / (pos_value_unlever or 1.0)
         self._unrealized = unrealized
 
-        return self._value if not lever else self._valuelever
+        return self._valuelever if lever else self._value
 
     def get_leverage(self):
         return self._leverage
@@ -497,12 +498,7 @@ class BackBroker(bt.BrokerBase):
 
         If order manipulation is needed, set the parameter ``safe`` to True
         '''
-        if safe:
-            os = [x.clone() for x in self.pending]
-        else:
-            os = [x for x in self.pending]
-
-        return os
+        return [x.clone() for x in self.pending] if safe else list(self.pending)
 
     def getposition(self, data):
         '''Returns the current position status (a ``Position`` instance) for
@@ -521,11 +517,10 @@ class BackBroker(bt.BrokerBase):
         oref = order.ref
         pref = getattr(order.parent, 'ref', oref)  # parent ref or self
 
-        if oref != pref:
-            if pref not in self._pchildren:
-                order.reject()  # parent not there - may have been rejected
-                self.notify(order)  # reject child, notify
-                return None
+        if oref != pref and pref not in self._pchildren:
+            order.reject()  # parent not there - may have been rejected
+            self.notify(order)  # reject child, notify
+            return None
 
         return pref
 
@@ -557,7 +552,7 @@ class BackBroker(bt.BrokerBase):
 
     def check_submitted(self):
         cash = self.cash
-        positions = dict()
+        positions = {}
 
         while self.submitted:
             order = self.submitted.popleft()
@@ -610,8 +605,7 @@ class BackBroker(bt.BrokerBase):
         # ocoref = self._ocos[order.ref] or order.ref  # a parent or self
         parentref = self._ocos[order.ref]
         ocoref = self._ocos.get(parentref, None)
-        ocol = self._ocol.pop(ocoref, None)
-        if ocol:
+        if ocol := self._ocol.pop(ocoref, None):
             for i in range(len(self.pending) - 1, -1, -1):
                 o = self.pending[i]
                 if o is not None and o.ref in ocol:
@@ -724,16 +718,10 @@ class BackBroker(bt.BrokerBase):
             cash = self.cash
         else:
             pnl = 0
-            if not self.p.coo:
-                price = pprice_orig = order.created.price
+            if self.p.coo and order.exectype == Order.Market:
+                price = pprice_orig = order.data.open[0]
             else:
-                # When doing cheat on open, the price to be considered for a
-                # market order is the opening price and not the default closing
-                # price with which the order was created
-                if order.exectype == Order.Market:
-                    price = pprice_orig = order.data.open[0]
-                else:
-                    price = pprice_orig = order.created.price
+                price = pprice_orig = order.created.price
 
             psize, pprice, opened, closed = position.update(size, price)
 
@@ -812,9 +800,7 @@ class BackBroker(bt.BrokerBase):
             # return cash from pseudo-execution
             return cash
 
-        execsize = closed + opened
-
-        if execsize:
+        if execsize := closed + opened:
             # Confimrm the operation to the comminfo object
             comminfo.confirmexec(execsize, price)
 
@@ -878,19 +864,17 @@ class BackBroker(bt.BrokerBase):
 
         dt0 = order.data.datetime[0]
         # don't use "len" -> in replay the close can be reached with same len
-        if dt0 > order.created.dt:  # can only execute after creation time
-            # or (self.p.eosbar and dt0 == order.dteos):
-            if dt0 >= order.dteos:
-                # past the end of session or right at it and eosbar is True
-                if order.pannotated and dt0 > order.dteos:
-                    ago = -1
-                    execprice = order.pannotated
-                else:
-                    ago = 0
-                    execprice = pclose
+        if dt0 > order.created.dt and dt0 >= order.dteos:
+            # past the end of session or right at it and eosbar is True
+            if order.pannotated and dt0 > order.dteos:
+                ago = -1
+                execprice = order.pannotated
+            else:
+                ago = 0
+                execprice = pclose
 
-                self._execute(order, ago=ago, price=execprice)
-                return
+            self._execute(order, ago=ago, price=execprice)
+            return
 
         # If no exexcution has taken place ... annotate the closing price
         order.pannotated = pclose
@@ -907,16 +891,15 @@ class BackBroker(bt.BrokerBase):
                 # day low below req price ... match limit price
                 self._execute(order, ago=0, price=plimit)
 
-        else:  # Sell
-            if plimit <= popen:
-                # open greater/equal than requested - sell more expensive
-                pmin = max(plow, plimit)
-                p = self._slip_down(plimit, popen, doslip=self.p.slip_open,
-                                    lim=True)
-                self._execute(order, ago=0, price=p)
-            elif plimit <= phigh:
-                # day high above req price ... match limit price
-                self._execute(order, ago=0, price=plimit)
+        elif plimit <= popen:
+            # open greater/equal than requested - sell more expensive
+            pmin = max(plow, plimit)
+            p = self._slip_down(plimit, popen, doslip=self.p.slip_open,
+                                lim=True)
+            self._execute(order, ago=0, price=p)
+        elif plimit <= phigh:
+            # day high above req price ... match limit price
+            self._execute(order, ago=0, price=plimit)
 
     def _try_exec_stop(self, order, popen, phigh, plow, pcreated, pclose):
         if order.isbuy():
@@ -929,15 +912,14 @@ class BackBroker(bt.BrokerBase):
                 p = self._slip_up(phigh, pcreated)
                 self._execute(order, ago=0, price=p)
 
-        else:  # Sell
-            if popen <= pcreated:
-                # price penetrated with an open gap - use open
-                p = self._slip_down(plow, popen, doslip=self.p.slip_open)
-                self._execute(order, ago=0, price=p)
-            elif plow <= pcreated:
-                # price penetrated during the session - use trigger price
-                p = self._slip_down(plow, pcreated)
-                self._execute(order, ago=0, price=p)
+        elif popen <= pcreated:
+            # price penetrated with an open gap - use open
+            p = self._slip_down(plow, popen, doslip=self.p.slip_open)
+            self._execute(order, ago=0, price=p)
+        elif plow <= pcreated:
+            # price penetrated during the session - use trigger price
+            p = self._slip_down(plow, pcreated)
+            self._execute(order, ago=0, price=p)
 
         # not (completely) executed and trailing stop
         if order.alive() and order.exectype == Order.StopTrail:
@@ -955,38 +937,35 @@ class BackBroker(bt.BrokerBase):
                 # price penetrated upwards during the session
                 order.triggered = True
                 # can calculate execution for a few cases - datetime is fixed
-                if popen > pclose:
-                    if plimit >= pcreated:  # limit above stop trigger
-                        p = self._slip_up(phigh, pcreated, lim=True)
-                        self._execute(order, ago=0, price=p)
-                    elif plimit >= pclose:
-                        self._execute(order, ago=0, price=plimit)
-                else:  # popen < pclose
-                    if plimit >= pcreated:
-                        p = self._slip_up(phigh, pcreated, lim=True)
-                        self._execute(order, ago=0, price=p)
-        else:  # Sell
-            if popen <= pcreated:
-                # price penetrated downwards with an open gap
-                order.triggered = True
-                self._try_exec_limit(order, popen, phigh, plow, plimit)
+                if (
+                    popen > pclose
+                    and plimit >= pcreated
+                    or popen <= pclose
+                    and plimit >= pcreated
+                ):  # limit above stop trigger
+                    p = self._slip_up(phigh, pcreated, lim=True)
+                    self._execute(order, ago=0, price=p)
+                elif popen > pclose and plimit >= pclose:
+                    self._execute(order, ago=0, price=plimit)
+        elif popen <= pcreated:
+            # price penetrated downwards with an open gap
+            order.triggered = True
+            self._try_exec_limit(order, popen, phigh, plow, plimit)
 
-            elif plow <= pcreated:
-                # price penetrated downwards during the session
-                order.triggered = True
+        elif plow <= pcreated:
+            # price penetrated downwards during the session
+            order.triggered = True
                 # can calculate execution for a few cases - datetime is fixed
-                if popen <= pclose:
-                    if plimit <= pcreated:
-                        p = self._slip_down(plow, pcreated, lim=True)
-                        self._execute(order, ago=0, price=p)
-                    elif plimit <= pclose:
-                        self._execute(order, ago=0, price=plimit)
-                else:
-                    # popen > pclose
-                    if plimit <= pcreated:
-                        p = self._slip_down(plow, pcreated, lim=True)
-                        self._execute(order, ago=0, price=p)
-
+            if (
+                popen <= pclose
+                and plimit <= pcreated
+                or popen > pclose
+                and plimit <= pcreated
+            ):
+                p = self._slip_down(plow, pcreated, lim=True)
+                self._execute(order, ago=0, price=p)
+            elif popen <= pclose and plimit <= pclose:
+                self._execute(order, ago=0, price=plimit)
         # not (completely) executed and trailing stop
         if order.alive() and order.exectype == Order.StopTrailLimit:
             order.trailadjust(pclose)

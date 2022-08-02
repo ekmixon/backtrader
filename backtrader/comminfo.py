@@ -191,25 +191,24 @@ class CommInfoBase(with_metaclass(MetaParams)):
 
     def getsize(self, price, cash):
         '''Returns the needed size to meet a cash operation at a given price'''
-        if not self._stocklike:
-            return int(self.p.leverage * (cash // self.get_margin(price)))
-
-        return int(self.p.leverage * (cash // price))
+        return (
+            int(self.p.leverage * (cash // price))
+            if self._stocklike
+            else int(self.p.leverage * (cash // self.get_margin(price)))
+        )
 
     def getoperationcost(self, size, price):
         '''Returns the needed amount of cash an operation would cost'''
-        if not self._stocklike:
-            return abs(size) * self.get_margin(price)
-
-        return abs(size) * price
+        return (
+            abs(size) * price
+            if self._stocklike
+            else abs(size) * self.get_margin(price)
+        )
 
     def getvaluesize(self, size, price):
         '''Returns the value of size for given a price. For future-like
         objects it is fixed at size * margin'''
-        if not self._stocklike:
-            return abs(size) * self.get_margin(price)
-
-        return size * price
+        return size * price if self._stocklike else abs(size) * self.get_margin(price)
 
     def getvalue(self, position, price):
         '''Returns the value of a position given a price. For future-like
@@ -250,10 +249,7 @@ class CommInfoBase(with_metaclass(MetaParams)):
 
     def cashadjust(self, size, price, newprice):
         '''Calculates cash adjustment for a given price difference'''
-        if not self._stocklike:
-            return size * (newprice - price) * self.p.mult
-
-        return 0.0
+        return 0.0 if self._stocklike else size * (newprice - price) * self.p.mult
 
     def get_credit_interest(self, data, pos, dt):
         '''Calculates the credit due for short selling or product specific'''

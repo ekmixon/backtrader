@@ -125,10 +125,11 @@ class VWR(TimeFrameAnalyzerBase):
         else:
             self._fundmode = self.p.fund
 
-        if not self._fundmode:
-            self._pis = [self.strategy.broker.getvalue()]  # keep initial value
-        else:
-            self._pis = [self.strategy.broker.fundvalue]  # keep initial value
+        self._pis = (
+            [self.strategy.broker.fundvalue]
+            if self._fundmode
+            else [self.strategy.broker.getvalue()]
+        )
 
         self._pns = [None]  # keep final prices (value)
 
@@ -160,10 +161,7 @@ class VWR(TimeFrameAnalyzerBase):
         self.rets['vwr'] = vwr
 
     def notify_fund(self, cash, value, fundvalue, shares):
-        if not self._fundmode:
-            self._pns[-1] = value  # annotate last seen pn for current period
-        else:
-            self._pns[-1] = fundvalue  # annotate last pn for current period
+        self._pns[-1] = fundvalue if self._fundmode else value
 
     def _on_dt_over(self):
         self._pis.append(self._pns[-1])  # last pn is pi in next period

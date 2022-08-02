@@ -43,7 +43,7 @@ from .utils import OrderedDict, AutoOrderedDict, AutoDictList
 class MetaStrategy(StrategyBase.__class__):
     _indcol = dict()
 
-    def __new__(meta, name, bases, dct):
+    def __new__(cls, name, bases, dct):
         # Hack to support original method name for notify_order
         if 'notify' in dct:
             # rename 'notify' to 'notify_order'
@@ -52,21 +52,20 @@ class MetaStrategy(StrategyBase.__class__):
             # rename 'notify' to 'notify_order'
             dct['notify_trade'] = dct.pop('notify_operation')
 
-        return super(MetaStrategy, meta).__new__(meta, name, bases, dct)
+        return super(MetaStrategy, cls).__new__(cls, name, bases, dct)
 
-    def __init__(cls, name, bases, dct):
+    def __init__(self, name, bases, dct):
         '''
         Class has already been created ... register subclasses
         '''
         # Initialize the class
-        super(MetaStrategy, cls).__init__(name, bases, dct)
+        super(MetaStrategy, self).__init__(name, bases, dct)
 
-        if not cls.aliased and \
-           name != 'Strategy' and not name.startswith('_'):
-            cls._indcol[name] = cls
+        if not self.aliased and name != 'Strategy' and not name.startswith('_'):
+            self._indcol[name] = self
 
-    def donew(cls, *args, **kwargs):
-        _obj, args, kwargs = super(MetaStrategy, cls).donew(*args, **kwargs)
+    def donew(self, *args, **kwargs):
+        _obj, args, kwargs = super(MetaStrategy, self).donew(*args, **kwargs)
 
         # Find the owner and store it
         _obj.env = _obj.cerebro = cerebro = findowner(_obj, bt.Cerebro)
@@ -74,30 +73,31 @@ class MetaStrategy(StrategyBase.__class__):
 
         return _obj, args, kwargs
 
-    def dopreinit(cls, _obj, *args, **kwargs):
-        _obj, args, kwargs = \
-            super(MetaStrategy, cls).dopreinit(_obj, *args, **kwargs)
+    def dopreinit(self, _obj, *args, **kwargs):
+        _obj, args, kwargs = super(MetaStrategy, self).dopreinit(_obj, *args, **kwargs)
         _obj.broker = _obj.env.broker
         _obj._sizer = bt.sizers.FixedSize()
-        _obj._orders = list()
-        _obj._orderspending = list()
+        _obj._orders = []
+        _obj._orderspending = []
         _obj._trades = collections.defaultdict(AutoDictList)
-        _obj._tradespending = list()
+        _obj._tradespending = []
 
         _obj.stats = _obj.observers = ItemCollection()
         _obj.analyzers = ItemCollection()
         _obj._alnames = collections.defaultdict(itertools.count)
-        _obj.writers = list()
+        _obj.writers = []
 
-        _obj._slave_analyzers = list()
+        _obj._slave_analyzers = []
 
         _obj._tradehistoryon = False
 
         return _obj, args, kwargs
 
-    def dopostinit(cls, _obj, *args, **kwargs):
-        _obj, args, kwargs = \
-            super(MetaStrategy, cls).dopostinit(_obj, *args, **kwargs)
+    def dopostinit(self, _obj, *args, **kwargs):
+        _obj, args, kwargs = super(MetaStrategy, self).dopostinit(
+            _obj, *args, **kwargs
+        )
+
 
         _obj._sizer.set(_obj, _obj.broker)
 
@@ -162,13 +162,10 @@ class Strategy(with_metaclass(MetaStrategy, StrategyBase)):
             clk = getattr(lineiter, '_clock', None)
             if clk is None:
                 clk = getattr(lineiter._owner, '_clock', None)
-                if clk is None:
-                    continue
+            if clk is None:
+                continue
 
-            while True:
-                if id(clk) in dataids:
-                    break  # already top-level clock (data feed)
-
+            while id(clk) not in dataids:
                 # See if the current clock has higher level clocks
                 clk2 = getattr(clk, '_clock', None)
                 if clk2 is None:
@@ -189,7 +186,7 @@ class Strategy(with_metaclass(MetaStrategy, StrategyBase)):
 
             _dminperiods[clk].append(lineiter._minperiod)
 
-        self._minperiods = list()
+        self._minperiods = []
         for data in self.datas:
 
             # Do not only consider the data as clock but also its lines which
@@ -211,7 +208,7 @@ class Strategy(with_metaclass(MetaStrategy, StrategyBase)):
 
         # Set the minperiod
         minperiods = \
-            [x._minperiod for x in self._lineiterators[LineIterator.IndType]]
+                [x._minperiod for x in self._lineiterators[LineIterator.IndType]]
         self._minperiod = max(minperiods or [self._minperiod])
 
     def _addwriter(self, writer):
@@ -258,7 +255,7 @@ class Strategy(with_metaclass(MetaStrategy, StrategyBase)):
             self.stats.append(obs, obsname)
             return
 
-        setattr(self.stats, obsname, list())
+        setattr(self.stats, obsname, [])
         l = getattr(self.stats, obsname)
 
         for data in self.datas:
@@ -423,19 +420,18 @@ class Strategy(with_metaclass(MetaStrategy, StrategyBase)):
             self.getindicators_lines(), self.getobservers())
         self.indobscsv.extend(filter(lambda x: x.csv, indobs))
 
-        headers = list()
+        headers = []
 
         # prepare the indicators/observers data headers
         for iocsv in self.indobscsv:
             name = iocsv.plotinfo.plotname or iocsv.__class__.__name__
-            headers.append(name)
-            headers.append('len')
+            headers.extend((name, 'len'))
             headers.extend(iocsv.getlinealiases())
 
         return headers
 
     def getwritervalues(self):
-        values = list()
+        values = []
 
         for iocsv in self.indobscsv:
             name = iocsv.plotinfo.plotname or iocsv.__class__.__name__
@@ -497,8 +493,8 @@ class Strategy(with_metaclass(MetaStrategy, StrategyBase)):
 
     def clear(self):
         self._orders.extend(self._orderspending)
-        self._orderspending = list()
-        self._tradespending = list()
+        self._orderspending = []
+        self._tradespending = []
 
     def _addnotification(self, order, quicknotify=False):
         if not order.p.simulated:
@@ -1139,7 +1135,7 @@ class Strategy(with_metaclass(MetaStrategy, StrategyBase)):
                      data=data, price=price, plimit=plimit, exectype=exectype,
                      valid=valid, tradeid=tradeid,
                      trailamount=trailamount, trailpercent=trailpercent)
-        kargs.update(oargs)
+        kargs |= oargs
         kargs.update(kwargs)
         kargs['transmit'] = limitexec is None and stopexec is None
         o = self.buy(**kargs)
@@ -1148,7 +1144,7 @@ class Strategy(with_metaclass(MetaStrategy, StrategyBase)):
             # low side / stop
             kargs = dict(data=data, price=stopprice, exectype=stopexec,
                          valid=valid, tradeid=tradeid)
-            kargs.update(stopargs)
+            kargs |= stopargs
             kargs.update(kwargs)
             kargs['parent'] = o
             kargs['transmit'] = limitexec is None
@@ -1161,7 +1157,7 @@ class Strategy(with_metaclass(MetaStrategy, StrategyBase)):
             # high side / limit
             kargs = dict(data=data, price=limitprice, exectype=limitexec,
                          valid=valid, tradeid=tradeid)
-            kargs.update(limitargs)
+            kargs |= limitargs
             kargs.update(kwargs)
             kargs['parent'] = o
             kargs['transmit'] = True
@@ -1211,7 +1207,7 @@ class Strategy(with_metaclass(MetaStrategy, StrategyBase)):
                      data=data, price=price, plimit=plimit, exectype=exectype,
                      valid=valid, tradeid=tradeid,
                      trailamount=trailamount, trailpercent=trailpercent)
-        kargs.update(oargs)
+        kargs |= oargs
         kargs.update(kwargs)
         kargs['transmit'] = limitexec is None and stopexec is None
         o = self.sell(**kargs)
@@ -1220,7 +1216,7 @@ class Strategy(with_metaclass(MetaStrategy, StrategyBase)):
             # high side / stop
             kargs = dict(data=data, price=stopprice, exectype=stopexec,
                          valid=valid, tradeid=tradeid)
-            kargs.update(stopargs)
+            kargs |= stopargs
             kargs.update(kwargs)
             kargs['parent'] = o
             kargs['transmit'] = limitexec is None  # transmit if last
@@ -1233,7 +1229,7 @@ class Strategy(with_metaclass(MetaStrategy, StrategyBase)):
             # low side / limit
             kargs = dict(data=data, price=limitprice, exectype=limitexec,
                          valid=valid, tradeid=tradeid)
-            kargs.update(limitargs)
+            kargs |= limitargs
             kargs.update(kwargs)
             kargs['parent'] = o
             kargs['transmit'] = True
@@ -1307,23 +1303,22 @@ class Strategy(with_metaclass(MetaStrategy, StrategyBase)):
             data = self.data
 
         possize = self.getposition(data, self.broker).size
-        if not target and possize:  # closing a position
+        if not target and possize:
             return self.close(data=data, size=possize, price=price, **kwargs)
 
-        else:
-            value = self.broker.getvalue(datas=[data])
-            comminfo = self.broker.getcommissioninfo(data)
+        value = self.broker.getvalue(datas=[data])
+        comminfo = self.broker.getcommissioninfo(data)
 
-            # Make sure a price is there
-            price = price if price is not None else data.close[0]
+        # Make sure a price is there
+        price = price if price is not None else data.close[0]
 
-            if target > value:
-                size = comminfo.getsize(price, target - value)
-                return self.buy(data=data, size=size, price=price, **kwargs)
+        if target > value:
+            size = comminfo.getsize(price, target - value)
+            return self.buy(data=data, size=size, price=price, **kwargs)
 
-            elif target < value:
-                size = comminfo.getsize(price, value - target)
-                return self.sell(data=data, size=size, price=price, **kwargs)
+        elif target < value:
+            size = comminfo.getsize(price, value - target)
+            return self.sell(data=data, size=size, price=price, **kwargs)
 
         return None  # no execution size == possize
 
@@ -1397,7 +1392,7 @@ class Strategy(with_metaclass(MetaStrategy, StrategyBase)):
 
         A property ``positionbyname`` is also available
         '''
-        data = self.datas[0] if not name else self.getdatabyname(name)
+        data = self.getdatabyname(name) if name else self.datas[0]
         broker = broker or self.broker
         return broker.getposition(data)
 
@@ -1482,9 +1477,11 @@ class MetaSigStrategy(Strategy.__class__):
         cls.next = cls._next_catch
         return cls
 
-    def dopreinit(cls, _obj, *args, **kwargs):
-        _obj, args, kwargs = \
-            super(MetaSigStrategy, cls).dopreinit(_obj, *args, **kwargs)
+    def dopreinit(self, _obj, *args, **kwargs):
+        _obj, args, kwargs = super(MetaSigStrategy, self).dopreinit(
+            _obj, *args, **kwargs
+        )
+
 
         _obj._signals = collections.defaultdict(list)
 
@@ -1502,9 +1499,11 @@ class MetaSigStrategy(Strategy.__class__):
 
         return _obj, args, kwargs
 
-    def dopostinit(cls, _obj, *args, **kwargs):
-        _obj, args, kwargs = \
-            super(MetaSigStrategy, cls).dopostinit(_obj, *args, **kwargs)
+    def dopostinit(self, _obj, *args, **kwargs):
+        _obj, args, kwargs = super(MetaSigStrategy, self).dopostinit(
+            _obj, *args, **kwargs
+        )
+
 
         for sigtype, sigcls, sigargs, sigkwargs in _obj.p.signals:
             _obj._signals[sigtype].append(sigcls(*sigargs, **sigkwargs))
@@ -1701,9 +1700,8 @@ class SignalStrategy(with_metaclass(MetaSigStrategy, Strategy)):
             if ls_short or l_rev:
                 self._sentinel = self.sell(self._dtarget)
 
-            if ls_long or l_enter:
-                if self.p._accumulate:
-                    self._sentinel = self.buy(self._dtarget)
+            if (ls_long or l_enter) and self.p._accumulate:
+                self._sentinel = self.buy(self._dtarget)
 
         elif size < 0:  # current short position
             if ls_long or s_exit or s_rev or s_leave:
@@ -1713,6 +1711,5 @@ class SignalStrategy(with_metaclass(MetaSigStrategy, Strategy)):
             if ls_long or s_rev:
                 self._sentinel = self.buy(self._dtarget)
 
-            if ls_short or s_enter:
-                if self.p._accumulate:
-                    self._sentinel = self.sell(self._dtarget)
+            if (ls_short or s_enter) and self.p._accumulate:
+                self._sentinel = self.sell(self._dtarget)

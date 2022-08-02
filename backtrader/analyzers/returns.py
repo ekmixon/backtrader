@@ -108,20 +108,22 @@ class Returns(TimeFrameAnalyzerBase):
         else:
             self._fundmode = self.p.fund
 
-        if not self._fundmode:
-            self._value_start = self.strategy.broker.getvalue()
-        else:
-            self._value_start = self.strategy.broker.fundvalue
+        self._value_start = (
+            self.strategy.broker.fundvalue
+            if self._fundmode
+            else self.strategy.broker.getvalue()
+        )
 
         self._tcount = 0
 
     def stop(self):
         super(Returns, self).stop()
 
-        if not self._fundmode:
-            self._value_end = self.strategy.broker.getvalue()
-        else:
-            self._value_end = self.strategy.broker.fundvalue
+        self._value_end = (
+            self.strategy.broker.fundvalue
+            if self._fundmode
+            else self.strategy.broker.getvalue()
+        )
 
         # Compound return
         try:
@@ -129,11 +131,7 @@ class Returns(TimeFrameAnalyzerBase):
         except ZeroDivisionError:
             rtot = float('-inf')
         else:
-            if nlrtot < 0.0:
-                rtot = float('-inf')
-            else:
-                rtot = math.log(nlrtot)
-
+            rtot = float('-inf') if nlrtot < 0.0 else math.log(nlrtot)
         self.rets['rtot'] = rtot
 
         # Average return

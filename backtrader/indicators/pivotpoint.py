@@ -73,9 +73,8 @@ class PivotPoint(Indicator):
 
     def _plotinit(self):
         # Try to plot to the actual timeframe master
-        if self.p._autoplot:
-            if hasattr(self.data, 'data'):
-                self.plotinfo.plotmaster = self.data.data
+        if self.p._autoplot and hasattr(self.data, 'data'):
+            self.plotinfo.plotmaster = self.data.data
 
     def __init__(self):
         o = self.data.open
@@ -157,9 +156,8 @@ class FibonacciPivotPoint(Indicator):
 
     def _plotinit(self):
         # Try to plot to the actual timeframe master
-        if self.p._autoplot:
-            if hasattr(self.data, 'data'):
-                self.plotinfo.plotmaster = self.data.data
+        if self.p._autoplot and hasattr(self.data, 'data'):
+            self.plotinfo.plotmaster = self.data.data
 
     def __init__(self):
         o = self.data.open
@@ -244,9 +242,8 @@ class DemarkPivotPoint(Indicator):
 
     def _plotinit(self):
         # Try to plot to the actual timeframe master
-        if self.p._autoplot:
-            if hasattr(self.data, 'data'):
-                self.plotinfo.plotmaster = self.data.data
+        if self.p._autoplot and hasattr(self.data, 'data'):
+            self.plotinfo.plotmaster = self.data.data
 
     def __init__(self):
         x1 = self.data.high + 2.0 * self.data.low + self.data.close

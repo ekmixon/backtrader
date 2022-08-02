@@ -72,10 +72,11 @@ class Value(Observer):
             self._fundmode = self.p.fund
 
     def next(self):
-        if not self._fundmode:
-            self.lines[0][0] = self._owner.broker.getvalue()
-        else:
-            self.lines[0][0] = self._owner.broker.fundvalue
+        self.lines[0][0] = (
+            self._owner.broker.fundvalue
+            if self._fundmode
+            else self._owner.broker.getvalue()
+        )
 
 
 class Broker(Observer):

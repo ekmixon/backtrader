@@ -42,7 +42,7 @@ class NonZeroDifference(Indicator):
 
     def next(self):
         d = self.data0[0] - self.data1[0]
-        self.l.nzd[0] = d if d else self.l.nzd[-1]
+        self.l.nzd[0] = d or self.l.nzd[-1]
 
     def oncestart(self, start, end):
         self.line.array[start] = (
@@ -56,7 +56,7 @@ class NonZeroDifference(Indicator):
         prev = larray[start - 1]
         for i in range(start, end):
             d = d0array[i] - d1array[i]
-            larray[i] = prev = d if d else prev
+            larray[i] = prev = d or prev
 
 
 class _CrossBase(Indicator):

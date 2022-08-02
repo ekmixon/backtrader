@@ -123,19 +123,17 @@ class SessionFiller(with_metaclass(metabase.MetaParams, object)):
             sessstart = datetime.combine(ddate, data.p.sessionstart)
             self.sessend = sessend = datetime.combine(ddate, data.p.sessionend)
 
-            if sessstart <= dtime_cur <= sessend:
-                # 1st bar from session in the session - fill from session start
-                if self.seenbar or not self.p.skip_first_fill:
-                    ret = self._fillbars(data,
-                                         sessstart - self._tdunit, dtime_cur)
+            if sessstart <= dtime_cur <= sessend and (
+                self.seenbar or not self.p.skip_first_fill
+            ):
+                ret = self._fillbars(data,
+                                     sessstart - self._tdunit, dtime_cur)
 
             self.seenbar = True
-            self.dtime_prev = dtime_cur
-
         else:
             # Seen a previous bar and this is in the session - fill up to it
             ret = self._fillbars(data, self.dtime_prev, dtime_cur)
-            self.dtime_prev = dtime_cur
+        self.dtime_prev = dtime_cur
 
         return ret
 

@@ -187,7 +187,7 @@ class Trade(object):
         self.barlen = 0
 
         self.historyon = historyon
-        self.history = list()
+        self.history = []
 
         self.status = self.Created
 
@@ -302,7 +302,7 @@ class Trade(object):
 
         # Update the history if needed
         if self.historyon:
-            dt0 = self.data.datetime[0] if not order.p.simulated else 0.0
+            dt0 = 0.0 if order.p.simulated else self.data.datetime[0]
             histentry = TradeHistory(
                 self.status, dt0, self.barlen,
                 self.size, self.price, self.value,

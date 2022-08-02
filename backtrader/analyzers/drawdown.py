@@ -174,10 +174,11 @@ class TimeDrawDown(bt.TimeFrameAnalyzerBase):
         self.ddlen = 0
 
     def on_dt_over(self):
-        if not self._fundmode:
-            value = self.strategy.broker.getvalue()
-        else:
-            value = self.strategy.broker.fundvalue
+        value = (
+            self.strategy.broker.fundvalue
+            if self._fundmode
+            else self.strategy.broker.getvalue()
+        )
 
         # update the maximum seen peak
         if value > self.peak:
